@@ -1,74 +1,97 @@
-import { useEffect, useState } from "react";
-import { searchImagesApi } from "./api";
-import ImageGallery from "./components/ImageGallery/ImageCard/ImageGallery";
-import Loader from "./components/Loader/Loader";
-import ErrorMessage from "./components/ErrorMessage/ErrorMessage";
+import { useState, useEffect } from "react";
+import fetchImages from "./components/api-img/api-img";
 import SearchBar from "./components/SearchBar/SearchBar";
-import { Toaster, toast } from "react-hot-toast";
+import ErrorMessage from "./components/ErrorMessage/ErrorMessage";
+import Loader from "./components/Loader/Loader";
 import LoadMoreBtn from "./components/LoadMoreBtn/LoadMoreBtn";
 import ImageModal from "./components/ImageModal/ImageModal";
+import ImageGallery from "./components/ImageGallery/ImageGallery";
+import toast, { Toaster } from "react-hot-toast";
+import { Image } from "../App.types";
 
-
-interface Image {
-  id: string;
-  url: string;
-  
+interface FetchImagesResponse {
+  results: Image[];
+  total: number;
 }
 
-const App: React.FC = () => {
-  const [images, setImages] = useState<Image[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<boolean>(false);
+const App = () => {
   const [query, setQuery] = useState<string>("");
   const [page, setPage] = useState<number>(1);
-  const [modalImage, setModalImage] = useState<Image | null>(null);
+  const [loadState, setLoadState] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
+  const [images, setImages] = useState<Image[]>([]);
+  const [selectedImage, setSelectedImage] = useState<Image | null>(null);
+  const [modalIsOpen, setModalIsOpen] = useState<boolean>(false);
+  const [totalImages, setTotalImages] = useState<number>(0);
 
   useEffect(() => {
-    const searchImages = async () => {
+    const fetchData = async () => {
+      setLoadState(true);
       try {
-        setIsLoading(true);
-        const data = await searchImagesApi(query, page);
-        setImages((prev) => [...prev, ...data]);
-        console.log("data", data);
+        const { results, total }: FetchImagesResponse = await fetchImages(
+          query,
+          page
+        );
+        if (page === 1) {
+          setImages(results);
+          setTotalImages(total);
+        } else {
+          setImages((prevImages) => [...prevImages, ...results]);
+        }
+        setLoadState(false);
+        if (total === 0) {
+          toast.error("Query applies to 0 images");
+        }
       } catch (error) {
-        setError(true);
-        toast.error("Зображення не знайдено😮");
-      } finally {
-        setIsLoading(false);
+        setError("Error fetching images.");
+        setLoadState(false);
       }
     };
-    if (query) {
-      searchImages();
+    if (query !== "") {
+      fetchData();
     }
   }, [query, page]);
 
-  const handleSubmit = (newQuery: string) => {
-    setQuery(newQuery);
-    setImages([]);
+  useEffect(() => {
+    if (images.length === totalImages && totalImages !== 0) {
+      toast.error("No more images to load");
+    }
+  }, [images, totalImages]);
+
+  const handleSubmit = (searchQuery: string) => {
+    setQuery(searchQuery);
     setPage(1);
   };
 
-  const handleLoadMore = () => {
+  const loadMoreImages = () => {
     setPage((prevPage) => prevPage + 1);
   };
 
-  const handleImageClick = (image: Image) => {
-    setModalImage(image);
+  const closeModal = () => {
+    setModalIsOpen(false);
+    setSelectedImage(null);
   };
 
-  const handleCloseModal = () => {
-    setModalImage(null);
+  const openModal = (image: Image) => {
+    setModalIsOpen(true);
+    setSelectedImage(image);
   };
 
   return (
-    <div>
-      <Toaster />
+    <div className="container">
       <SearchBar onSubmit={handleSubmit} />
-      {error && <ErrorMessage message="Произошла ошибка при загрузке изображений" />}
-      {isLoading && <Loader />}
-      <ImageGallery images={images} onImageClick={handleImageClick} />
-      {images.length > 0 && <LoadMoreBtn onClick={handleLoadMore} />}
-      {modalImage && <ImageModal image={modalImage} onClose={handleCloseModal} />}
+      <ImageGallery images={images} openModal={openModal} />
+      {loadState && <Loader />}
+      {images.length > 0 && images.length < totalImages && (
+        <LoadMoreBtn onLoadMore={loadMoreImages} />
+      )}
+      <ImageModal
+        isOpen={modalIsOpen}
+        closeModal={closeModal}
+        image={selectedImage}
+      />
+      <Toaster position="top-right" reverseOrder={false} />
+      {error && <ErrorMessage message={error} />}
     </div>
   );
 };
