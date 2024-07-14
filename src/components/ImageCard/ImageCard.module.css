@@ -1,3 +1,5 @@
 .imageContainer {
   cursor: pointer;
+  object-fit: cover;
+  border-radius: 20px;
 }
